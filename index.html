@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Tournament Firebase</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+  th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+  th { background-color: #eee; }
+  input { width: 50px; }
+  .final { margin-top: 30px; }
+</style>
+</head>
+<body>
+
+<h1>Mini Tournament</h1>
+
+<h2>Matches</h2>
+<table id="matchesTable">
+  <thead>
+    <tr>
+      <th>Day</th>
+      <th>Match</th>
+      <th>Score</th>
+      <th>Set Score</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>Leaderboard</h2>
+<table id="leaderboard">
+  <thead>
+    <tr>
+      <th>Team</th>
+      <th>Points</th>
+      <th>Wins</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div class="final">
+  <h2>Final</h2>
+  <p id="finalMatch">Top 2 teams will play here</p>
+  <input type="number" id="finalTeam1Score" placeholder="Team 1 score">
+  <input type="number" id="finalTeam2Score" placeholder="Team 2 score">
+  <button onclick="setFinalScore()">Set Final Score</button>
+  <p id="finalResult"></p>
+</div>
+
+<script>
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyBClhOYxDhLpQKPwurk1V3vsPXJ1Csew6E",
+  authDomain: "project-add05.firebaseapp.com",
+  databaseURL: "https://project-add05-default-rtdb.firebaseio.com",
+  projectId: "project-add05",
+  storageBucket: "project-add05.firebasestorage.app",
+  messagingSenderId: "321491234235",
+  appId: "1:321491234235:web:1f674625d9f129f2ef689e",
+  measurementId: "G-87M4WVB5Z8"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  const teams = ["Barcelona", "Man City", "Liverpool"];
+  const days = ["Thursday","Thursday","Thursday","Friday","Friday","Friday","Saturday","Saturday","Sunday","Sunday"];
+
+  const matchesTemplate = [
+    {team1: "Barcelona", team2: "Man City"},
+    {team1: "Barcelona", team2: "Liverpool"},
+    {team1: "Man City", team2: "Liverpool"},
+    {team1: "Barcelona", team2: "Man City"},
+    {team1: "Barcelona", team2: "Liverpool"},
+    {team1: "Man City", team2: "Liverpool"},
+    {team1: "Barcelona", team2: "Man City"},
+    {team1: "Barcelona", team2: "Liverpool"},
+    {team1: "Man City", team2: "Liverpool"},
+    {team1: "Barcelona", team2: "Man City"}
+  ];
+
+  // Initialize Firebase matches if empty
+  db.ref('matches').once('value', snapshot => {
+    if(!snapshot.exists()){
+      matchesTemplate.forEach((m, i)=>{
+        db.ref('matches/'+i).set({
+          team1: m.team1,
+          team2: m.team2,
+          score: null,
+          day: days[i]
+        });
+      });
+      teams.forEach(t=>{
+        db.ref('leaderboard/'+t).set({points:0,wins:0});
+      });
+      db.ref('final').set({score1:null,score2:null});
+    }
+  });
+
+  // Render matches
+  function renderMatches(matches){
+    const tbody = document.querySelector("#matchesTable tbody");
+    tbody.innerHTML = "";
+    matches.forEach((match, index)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${match.day}</td>
+        <td>${match.team1} vs ${match.team2}</td>
+        <td>${match.score ? match.score : "-"}</td>
+        <td>
+          <input type="number" id="score1-${index}" placeholder="0">
+          <input type="number" id="score2-${index}" placeholder="0">
+          <button onclick="setScore(${index})">Set</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Render leaderboard
+  function renderLeaderboard(leaderboard){
+    const tbody = document.querySelector("#leaderboard tbody");
+    tbody.innerHTML = "";
+    Object.keys(leaderboard).forEach(team=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${team}</td><td>${leaderboard[team].points}</td><td>${leaderboard[team].wins}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Listen for changes
+  db.ref('matches').on('value', snap=>{
+    const matches = snap.val();
+    renderMatches(Object.values(matches));
+  });
+
+  db.ref('leaderboard').on('value', snap=>{
+    renderLeaderboard(snap.val());
+    renderFinalMatch(snap.val());
+  });
+
+  db.ref('final').on('value', snap=>{
+    const f = snap.val();
+    if(f.score1 !== null && f.score2 !== null){
+      const sorted = Object.entries(leaderboard).sort((a,b)=>b[1].points - a[1].points).map(e=>e[0]);
+      document.getElementById("finalResult").innerText = `${sorted[0]} ${f.score1} - ${f.score2} ${sorted[1]}`;
+    }
+  });
+
+  // Set match score
+  function setScore(index){
+    const score1 = parseInt(document.getElementById(`score1-${index}`).value);
+    const score2 = parseInt(document.getElementById(`score2-${index}`).value);
+    if(isNaN(score1)||isNaN(score2)) return alert("Enter valid scores!");
+
+    db.ref('matches/'+index+'/score').set(`${score1}-${score2}`);
+
+    db.ref('matches').once('value', snap=>{
+      const match = Object.values(snap.val())[index];
+      const t1 = match.team1, t2 = match.team2;
+      db.ref('leaderboard').once('value', lbSnap=>{
+        const lb = lbSnap.val();
+        if(score1>score2){ lb[t1].points+=3; lb[t1].wins+=1; }
+        else if(score2>score1){ lb[t2].points+=3; lb[t2].wins+=1; }
+        db.ref('leaderboard').set(lb);
+      });
+    });
+  }
+
+  // Render final match text
+  function renderFinalMatch(lb){
+    const sorted = Object.entries(lb).sort((a,b)=>b[1].points - a[1].points).map(e=>e[0]);
+    document.getElementById("finalMatch").innerText = `${sorted[0]} vs ${sorted[1]}`;
+  }
+
+  // Set final score
+  function setFinalScore(){
+    const score1 = parseInt(document.getElementById("finalTeam1Score").value);
+    const score2 = parseInt(document.getElementById("finalTeam2Score").value);
+    if(isNaN(score1)||isNaN(score2)) return alert("Enter valid scores!");
+    db.ref('final').set({score1, score2});
+  }
+
+</script>
+
+</body>
+</html>
