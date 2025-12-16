@@ -2,40 +2,45 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Daily QR Clue</title>
+<title>Daily QR Game</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- QR Scanner -->
+<!-- QR -->
 <script src="https://unpkg.com/html5-qrcode"></script>
-
-<!-- QR Generator -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
 body {
-  font-family: Arial;
-  background: #f2f2f2;
+  font-family: "Georgia", serif;
+  background: #e5e1d8;
   text-align: center;
   padding: 20px;
 }
 
-#top {
+#dayBar {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 15px;
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.arrow {
+  cursor: pointer;
+  font-size: 30px;
 }
 
 button {
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: none;
-  background: #333;
+  border-radius: 6px;
+  background: #3b2f1e;
   color: white;
-  border-radius: 5px;
   cursor: pointer;
 }
 
@@ -44,54 +49,72 @@ button {
   margin: auto;
 }
 
+/* PAPER EFFECT */
 #paper {
   display: none;
-  margin-top: 20px;
-  padding: 20px;
-  background: #fffbe6;
-  border: 2px solid #d6c28f;
-  border-radius: 10px;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 10;
+}
+
+#paperContent {
+  background: #fff7d6;
+  width: 80%;
+  max-width: 400px;
+  margin: 10% auto;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+  border: 2px solid #d2b48c;
+  animation: pop 0.3s ease;
+}
+
+@keyframes pop {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+#paperContent h2 {
+  margin-top: 0;
+  letter-spacing: 2px;
+}
+
+#paperText {
   font-size: 18px;
   white-space: pre-wrap;
 }
 
-#makeQRBox {
-  display: none;
-  margin-top: 20px;
-}
-
-textarea {
-  width: 90%;
-  height: 80px;
-}
-
-#qrcode {
+.close {
   margin-top: 15px;
+  background: #7a5c3e;
 }
 </style>
 </head>
 
 <body>
 
-<div id="top">
-  <h2 id="day"></h2>
-  <button onclick="openMakeQR()">➕ Make QR</button>
+<!-- DAY SWITCH -->
+<div id="dayBar">
+  <span class="arrow" onclick="changeDay(-1)">⬅️</span>
+  <strong id="dayText">Day 1</strong>
+  <span class="arrow" onclick="changeDay(1)">➡️</span>
 </div>
 
-<div id="makeQRBox">
-  <h3>Write QR Text</h3>
-  <textarea id="qrText" placeholder="Write the clue here..."></textarea><br><br>
-  <button onclick="makeQR()">Generate & Save</button>
-  <div id="qrcode"></div>
-</div>
-
-<h3>📷 Scan QR Code</h3>
+<h3>📷 Scan QR</h3>
 <div id="reader"></div>
 
-<div id="paper"></div>
+<!-- PAPER CLUE -->
+<div id="paper">
+  <div id="paperContent">
+    <h2 id="paperTitle">CLUE</h2>
+    <div id="paperText"></div>
+    <button class="close" onclick="closePaper()">Close</button>
+  </div>
+</div>
 
 <script>
-// 🔥 FIREBASE CONFIG (REPLACE THIS)
+// 🔥 Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyCnWbzujk4iwZnDxceRDQRqw4VmJU1owC4",
   authDomain: "zezo-36a82.firebaseapp.com",
@@ -99,49 +122,39 @@ const firebaseConfig = {
   projectId: "zezo-36a82",
   storageBucket: "zezo-36a82.appspot.com",
   messagingSenderId: "641346503114",
-  appId: "1:641346503114:web:faef4b2a051dcc059f4f33",
-  measurementId: "G-8BXRM7FYDM"
+  appId: "1:641346503114:web:faef4b2a051dcc059f4f33"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// Show day
-const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-document.getElementById("day").innerText =
-  days[new Date().getDay()];
-
-// Open QR creator
-function openMakeQR() {
-  document.getElementById("makeQRBox").style.display = "block";
+// DAY
+let currentDay = 1;
+function changeDay(step) {
+  if (currentDay + step < 1) return;
+  currentDay += step;
+  document.getElementById("dayText").innerText = "Day " + currentDay;
 }
 
-// Generate QR + Save
-function makeQR() {
-  const text = document.getElementById("qrText").value;
-  if (!text) return alert("Write something!");
-
-  // Save as QR Code 1
-  db.ref("qrCodes/qrCode1").set({
-    text: text,
-    createdAt: Date.now()
-  });
-
-  // Generate QR
-  document.getElementById("qrcode").innerHTML = "";
-  new QRCode(document.getElementById("qrcode"), {
-    text: text,
-    width: 200,
-    height: 200
-  });
-
-  alert("QR Code saved as QR Code 1 ✔");
+// CLOSE PAPER
+function closePaper() {
+  document.getElementById("paper").style.display = "none";
 }
 
-// QR Scanner
+// SCAN QR
 function onScanSuccess(decodedText) {
-  document.getElementById("paper").style.display = "block";
-  document.getElementById("paper").innerText = decodedText;
+  if (!decodedText.startsWith("day:")) return;
+
+  const dayNum = decodedText.split(":")[1];
+
+  db.ref("days/day" + dayNum).once("value").then(snap => {
+    if (snap.exists()) {
+      document.getElementById("paperTitle").innerText = "CLUE – Day " + dayNum;
+      document.getElementById("paperText").innerText = snap.val().text;
+      document.getElementById("paper").style.display = "block";
+    }
+  });
+
   html5QrcodeScanner.clear();
 }
 
