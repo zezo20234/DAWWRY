@@ -103,7 +103,6 @@ textarea {
   <textarea id="clueInput" placeholder="Write the clue text..."></textarea><br><br>
   <button onclick="saveClue()">Save & Generate QR</button>
   <div id="qrcode"></div>
-  <p>⬆️ Right-click / long-press → Save or Print</p>
 </div>
 
 <h3>📷 Scan QR</h3>
@@ -133,12 +132,21 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// DAY (visual only)
+// LOAD DAY FROM FIREBASE
+db.ref("day").once("value").then(snap => {
+  if (snap.exists()) {
+    day = snap.val();
+    document.getElementById("dayText").innerText = "Day " + day;
+  }
+});
+
+// DAY
 let day = 1;
 function changeDay(step) {
   if (day + step < 1) return;
   day += step;
   document.getElementById("dayText").innerText = "Day " + day;
+  db.ref("day").set(day); // SAVE DAY
 }
 
 // TOGGLE MAKE
@@ -147,23 +155,19 @@ function toggleMake() {
   box.style.display = box.style.display === "block" ? "none" : "block";
 }
 
-// SAVE CLUE + GENERATE QR
+// SAVE CLUE
 function saveClue() {
   const text = document.getElementById("clueInput").value;
   if (!text) return alert("Write a clue!");
 
-  // Save to Firebase
   db.ref("clue").set({ text });
 
-  // Generate QR
   document.getElementById("qrcode").innerHTML = "";
   new QRCode(document.getElementById("qrcode"), {
     text: "CLUE_QR",
     width: 220,
     height: 220
   });
-
-  alert("QR ready ✔ Print it!");
 }
 
 // CLOSE PAPER
@@ -171,11 +175,11 @@ function closePaper() {
   document.getElementById("paper").style.display = "none";
 }
 
-// CAMERA SCAN (FIXED)
+// SCAN CAMERA
 const html5QrCode = new Html5Qrcode("reader");
 
 html5QrCode.start(
-  { facingMode: "environment" }, // BACK CAMERA
+  { facingMode: "environment" },
   { fps: 10, qrbox: 250 },
   (decodedText) => {
     if (decodedText !== "CLUE_QR") return;
@@ -188,8 +192,7 @@ html5QrCode.start(
     });
 
     html5QrCode.stop();
-  },
-  (error) => {}
+  }
 );
 </script>
 
