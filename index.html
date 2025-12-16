@@ -9,8 +9,10 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- QR -->
+<!-- QR Scanner -->
 <script src="https://unpkg.com/html5-qrcode"></script>
+
+<!-- QR Generator -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
@@ -76,12 +78,6 @@ textarea {
   padding: 25px;
   border-radius: 12px;
   border: 2px solid #d2b48c;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.6);
-}
-
-#paperContent h2 {
-  margin-top: 0;
-  letter-spacing: 2px;
 }
 
 #paperText {
@@ -107,6 +103,7 @@ textarea {
   <textarea id="clueInput" placeholder="Write the clue text..."></textarea><br><br>
   <button onclick="saveClue()">Save & Generate QR</button>
   <div id="qrcode"></div>
+  <p>⬆️ Right-click / long-press → Save or Print</p>
 </div>
 
 <h3>📷 Scan QR</h3>
@@ -116,14 +113,13 @@ textarea {
 <div id="paper">
   <div id="paperContent">
     <h2>CLUE</h2>
-    <div id="paperText"></div>
-    <br>
+    <div id="paperText"></div><br>
     <button onclick="closePaper()">Close</button>
   </div>
 </div>
 
 <script>
-// 🔥 Firebase config
+// 🔥 Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyCnWbzujk4iwZnDxceRDQRqw4VmJU1owC4",
   authDomain: "zezo-36a82.firebaseapp.com",
@@ -151,21 +147,23 @@ function toggleMake() {
   box.style.display = box.style.display === "block" ? "none" : "block";
 }
 
-// SAVE CLUE
+// SAVE CLUE + GENERATE QR
 function saveClue() {
   const text = document.getElementById("clueInput").value;
   if (!text) return alert("Write a clue!");
 
+  // Save to Firebase
   db.ref("clue").set({ text });
 
+  // Generate QR
   document.getElementById("qrcode").innerHTML = "";
   new QRCode(document.getElementById("qrcode"), {
-    text: "clue1",
-    width: 200,
-    height: 200
+    text: "CLUE_QR",
+    width: 220,
+    height: 220
   });
 
-  alert("Clue saved ✔");
+  alert("QR ready ✔ Print it!");
 }
 
 // CLOSE PAPER
@@ -173,26 +171,26 @@ function closePaper() {
   document.getElementById("paper").style.display = "none";
 }
 
-// SCAN QR
-function onScanSuccess(decodedText) {
-  if (decodedText !== "clue1") return;
+// CAMERA SCAN (FIXED)
+const html5QrCode = new Html5Qrcode("reader");
 
-  db.ref("clue").once("value").then(snap => {
-    if (snap.exists()) {
-      document.getElementById("paperText").innerText = snap.val().text;
-      document.getElementById("paper").style.display = "block";
-    }
-  });
+html5QrCode.start(
+  { facingMode: "environment" }, // BACK CAMERA
+  { fps: 10, qrbox: 250 },
+  (decodedText) => {
+    if (decodedText !== "CLUE_QR") return;
 
-  html5QrcodeScanner.clear();
-}
+    db.ref("clue").once("value").then(snap => {
+      if (snap.exists()) {
+        document.getElementById("paperText").innerText = snap.val().text;
+        document.getElementById("paper").style.display = "block";
+      }
+    });
 
-const html5QrcodeScanner = new Html5QrcodeScanner(
-  "reader",
-  { fps: 10, qrbox: 250 }
+    html5QrCode.stop();
+  },
+  (error) => {}
 );
-
-html5QrcodeScanner.render(onScanSuccess);
 </script>
 
 </body>
