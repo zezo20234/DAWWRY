@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Daily QR Game</title>
+<title>QR Clue Game</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- Firebase -->
@@ -15,8 +15,8 @@
 
 <style>
 body {
-  font-family: "Georgia", serif;
-  background: #e5e1d8;
+  font-family: Georgia, serif;
+  background: #e6e1d4;
   text-align: center;
   padding: 20px;
 }
@@ -27,7 +27,6 @@ body {
   align-items: center;
   gap: 15px;
   font-size: 22px;
-  margin-bottom: 10px;
 }
 
 .arrow {
@@ -44,12 +43,23 @@ button {
   cursor: pointer;
 }
 
+#makeBox {
+  display: none;
+  margin-top: 15px;
+}
+
+textarea {
+  width: 90%;
+  height: 80px;
+}
+
 #reader {
   width: 300px;
   margin: auto;
+  margin-top: 20px;
 }
 
-/* PAPER EFFECT */
+/* PAPER */
 #paper {
   display: none;
   position: fixed;
@@ -62,17 +72,11 @@ button {
   background: #fff7d6;
   width: 80%;
   max-width: 400px;
-  margin: 10% auto;
+  margin: 15% auto;
   padding: 25px;
   border-radius: 12px;
-  box-shadow: 0 15px 40px rgba(0,0,0,0.6);
   border: 2px solid #d2b48c;
-  animation: pop 0.3s ease;
-}
-
-@keyframes pop {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  box-shadow: 0 15px 40px rgba(0,0,0,0.6);
 }
 
 #paperContent h2 {
@@ -84,37 +88,42 @@ button {
   font-size: 18px;
   white-space: pre-wrap;
 }
-
-.close {
-  margin-top: 15px;
-  background: #7a5c3e;
-}
 </style>
 </head>
 
 <body>
 
-<!-- DAY SWITCH -->
+<!-- DAY DISPLAY -->
 <div id="dayBar">
   <span class="arrow" onclick="changeDay(-1)">⬅️</span>
   <strong id="dayText">Day 1</strong>
   <span class="arrow" onclick="changeDay(1)">➡️</span>
 </div>
 
+<button onclick="toggleMake()">➕ Make QR</button>
+
+<!-- MAKE QR -->
+<div id="makeBox">
+  <textarea id="clueInput" placeholder="Write the clue text..."></textarea><br><br>
+  <button onclick="saveClue()">Save & Generate QR</button>
+  <div id="qrcode"></div>
+</div>
+
 <h3>📷 Scan QR</h3>
 <div id="reader"></div>
 
-<!-- PAPER CLUE -->
+<!-- PAPER -->
 <div id="paper">
   <div id="paperContent">
-    <h2 id="paperTitle">CLUE</h2>
+    <h2>CLUE</h2>
     <div id="paperText"></div>
-    <button class="close" onclick="closePaper()">Close</button>
+    <br>
+    <button onclick="closePaper()">Close</button>
   </div>
 </div>
 
 <script>
-// 🔥 Firebase
+// 🔥 Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyCnWbzujk4iwZnDxceRDQRqw4VmJU1owC4",
   authDomain: "zezo-36a82.firebaseapp.com",
@@ -128,12 +137,35 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// DAY
-let currentDay = 1;
+// DAY (visual only)
+let day = 1;
 function changeDay(step) {
-  if (currentDay + step < 1) return;
-  currentDay += step;
-  document.getElementById("dayText").innerText = "Day " + currentDay;
+  if (day + step < 1) return;
+  day += step;
+  document.getElementById("dayText").innerText = "Day " + day;
+}
+
+// TOGGLE MAKE
+function toggleMake() {
+  const box = document.getElementById("makeBox");
+  box.style.display = box.style.display === "block" ? "none" : "block";
+}
+
+// SAVE CLUE
+function saveClue() {
+  const text = document.getElementById("clueInput").value;
+  if (!text) return alert("Write a clue!");
+
+  db.ref("clue").set({ text });
+
+  document.getElementById("qrcode").innerHTML = "";
+  new QRCode(document.getElementById("qrcode"), {
+    text: "clue1",
+    width: 200,
+    height: 200
+  });
+
+  alert("Clue saved ✔");
 }
 
 // CLOSE PAPER
@@ -143,13 +175,10 @@ function closePaper() {
 
 // SCAN QR
 function onScanSuccess(decodedText) {
-  if (!decodedText.startsWith("day:")) return;
+  if (decodedText !== "clue1") return;
 
-  const dayNum = decodedText.split(":")[1];
-
-  db.ref("days/day" + dayNum).once("value").then(snap => {
+  db.ref("clue").once("value").then(snap => {
     if (snap.exists()) {
-      document.getElementById("paperTitle").innerText = "CLUE – Day " + dayNum;
       document.getElementById("paperText").innerText = snap.val().text;
       document.getElementById("paper").style.display = "block";
     }
