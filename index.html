@@ -1,200 +1,80 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>QR Clue Game</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
-<!-- QR Scanner -->
-<script src="https://unpkg.com/html5-qrcode"></script>
-
-<!-- QR Generator -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
+<title>AI Chatbot with Realtime DB</title>
 <style>
-body {
-  font-family: Georgia, serif;
-  background: #e6e1d4;
-  text-align: center;
-  padding: 20px;
-}
-
-#dayBar {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 15px;
-  font-size: 22px;
-}
-
-.arrow {
-  cursor: pointer;
-  font-size: 30px;
-}
-
-button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  background: #3b2f1e;
-  color: white;
-  cursor: pointer;
-}
-
-#makeBox {
-  display: none;
-  margin-top: 15px;
-}
-
-textarea {
-  width: 90%;
-  height: 80px;
-}
-
-#reader {
-  width: 300px;
-  margin: auto;
-  margin-top: 20px;
-}
-
-/* PAPER */
-#paper {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  z-index: 10;
-}
-
-#paperContent {
-  background: #fff7d6;
-  width: 80%;
-  max-width: 400px;
-  margin: 15% auto;
-  padding: 25px;
-  border-radius: 12px;
-  border: 2px solid #d2b48c;
-}
-
-#paperText {
-  font-size: 18px;
-  white-space: pre-wrap;
-}
+  body { font-family: Arial; text-align:center; margin-top:50px; background:#f0f0f0; }
+  #chat { width: 400px; height: 400px; overflow-y: auto; margin: 0 auto; background:white; padding:10px; border-radius:10px; border:1px solid #ccc; }
+  #userInput { width: 300px; padding:5px; }
+  #sendBtn { padding:5px 10px; }
+  .message { margin:5px 0; padding:5px; border-radius:5px; }
+  .user { background:#d1f0ff; text-align:right; }
+  .ai { background:#ffd1d1; text-align:left; }
 </style>
 </head>
-
 <body>
 
-<!-- DAY DISPLAY -->
-<div id="dayBar">
-  <span class="arrow" onclick="changeDay(-1)">⬅️</span>
-  <strong id="dayText">Day 1</strong>
-  <span class="arrow" onclick="changeDay(1)">➡️</span>
-</div>
+<h1>Learning AI Chatbot</h1>
 
-<button onclick="toggleMake()">➕ Make QR</button>
+<div id="chat"></div>
+<input type="text" id="userInput" placeholder="Type something...">
+<button id="sendBtn">Send</button>
 
-<!-- MAKE QR -->
-<div id="makeBox">
-  <textarea id="clueInput" placeholder="Write the clue text..."></textarea><br><br>
-  <button onclick="saveClue()">Save & Generate QR</button>
-  <div id="qrcode"></div>
-</div>
-
-<h3>📷 Scan QR</h3>
-<div id="reader"></div>
-
-<!-- PAPER -->
-<div id="paper">
-  <div id="paperContent">
-    <h2>CLUE</h2>
-    <div id="paperText"></div><br>
-    <button onclick="closePaper()">Close</button>
-  </div>
-</div>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-// 🔥 Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyCnWbzujk4iwZnDxceRDQRqw4VmJU1owC4",
-  authDomain: "zezo-36a82.firebaseapp.com",
-  databaseURL: "https://zezo-36a82-default-rtdb.firebaseio.com",
-  projectId: "zezo-36a82",
-  storageBucket: "zezo-36a82.appspot.com",
-  messagingSenderId: "641346503114",
-  appId: "1:641346503114:web:faef4b2a051dcc059f4f33"
-};
+  // --- FIREBASE CONFIG ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyCnWbzujk4iwZnDxceRDQRqw4VmJU1owC4",
+    authDomain: "zezo-36a82.firebaseapp.com",
+    databaseURL: "https://zezo-36a82-default-rtdb.firebaseio.com",
+    projectId: "zezo-36a82",
+    storageBucket: "zezo-36a82.firebasestorage.app",
+    messagingSenderId: "641346503114",
+    appId: "1:641346503114:web:faef4b2a051dcc059f4f33",
+    measurementId: "G-8BXRM7FYDM"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+  const chatDiv = document.getElementById('chat');
+  const input = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
 
-// LOAD DAY FROM FIREBASE
-db.ref("day").once("value").then(snap => {
-  if (snap.exists()) {
-    day = snap.val();
-    document.getElementById("dayText").innerText = "Day " + day;
+  sendBtn.onclick = async () => {
+    const userText = input.value.trim();
+    if (!userText) return;
+    addMessage('user', userText);
+    input.value = '';
+    await respond(userText);
+  };
+
+  function addMessage(sender, text) {
+    const div = document.createElement('div');
+    div.className = 'message ' + sender;
+    div.textContent = text;
+    chatDiv.appendChild(div);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
   }
-});
 
-// DAY
-let day = 1;
-function changeDay(step) {
-  if (day + step < 1) return;
-  day += step;
-  document.getElementById("dayText").innerText = "Day " + day;
-  db.ref("day").set(day); // SAVE DAY
-}
-
-// TOGGLE MAKE
-function toggleMake() {
-  const box = document.getElementById("makeBox");
-  box.style.display = box.style.display === "block" ? "none" : "block";
-}
-
-// SAVE CLUE
-function saveClue() {
-  const text = document.getElementById("clueInput").value;
-  if (!text) return alert("Write a clue!");
-
-  db.ref("clue").set({ text });
-
-  document.getElementById("qrcode").innerHTML = "";
-  new QRCode(document.getElementById("qrcode"), {
-    text: "CLUE_QR",
-    width: 220,
-    height: 220
-  });
-}
-
-// CLOSE PAPER
-function closePaper() {
-  document.getElementById("paper").style.display = "none";
-}
-
-// SCAN CAMERA
-const html5QrCode = new Html5Qrcode("reader");
-
-html5QrCode.start(
-  { facingMode: "environment" },
-  { fps: 10, qrbox: 250 },
-  (decodedText) => {
-    if (decodedText !== "CLUE_QR") return;
-
-    db.ref("clue").once("value").then(snap => {
-      if (snap.exists()) {
-        document.getElementById("paperText").innerText = snap.val().text;
-        document.getElementById("paper").style.display = "block";
+  async function respond(userText) {
+    const key = userText.toLowerCase();
+    const snapshot = await db.ref('knowledge/' + key).get();
+    if (snapshot.exists()) {
+      addMessage('ai', snapshot.val());
+    } else {
+      const answer = prompt(`I don't know "${userText}". Teach me!`);
+      if (answer) {
+        await db.ref('knowledge/' + key).set(answer);
+        addMessage('ai', answer);
+      } else {
+        addMessage('ai', "I won't remember that.");
       }
-    });
-
-    html5QrCode.stop();
+    }
   }
-);
 </script>
-
 </body>
 </html>
