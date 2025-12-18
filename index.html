@@ -2,20 +2,32 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AI Chatbot with Realtime DB</title>
+<title>Smart Learning AI Chatbot</title>
 <style>
-  body { font-family: Arial; text-align:center; margin-top:50px; background:#f0f0f0; }
-  #chat { width: 400px; height: 400px; overflow-y: auto; margin: 0 auto; background:white; padding:10px; border-radius:10px; border:1px solid #ccc; }
+  body { font-family: Arial; text-align:center; margin-top:30px; background:#f0f0f0; }
+  #chat { width: 450px; height: 450px; overflow-y: auto; margin: 0 auto; background:white; padding:10px; border-radius:10px; border:1px solid #ccc; }
   #userInput { width: 300px; padding:5px; }
   #sendBtn { padding:5px 10px; }
   .message { margin:5px 0; padding:5px; border-radius:5px; }
   .user { background:#d1f0ff; text-align:right; }
   .ai { background:#ffd1d1; text-align:left; }
+
+  /* Face & Eyes */
+  #face { margin: 20px auto; width: 100px; height: 50px; position: relative; }
+  .eye { width: 20px; height: 20px; background:black; border-radius:50%; position:absolute; top:0; }
+  .eye.left { left:0; }
+  .eye.right { right:0; }
+  .pupil { width: 10px; height: 10px; background:white; border-radius:50%; position:absolute; top:5px; left:5px; }
 </style>
 </head>
 <body>
 
-<h1>Learning AI Chatbot</h1>
+<h1>Smart Learning AI Chatbot</h1>
+
+<div id="face">
+  <div class="eye left"><div class="pupil" id="pupilLeft"></div></div>
+  <div class="eye right"><div class="pupil" id="pupilRight"></div></div>
+</div>
 
 <div id="chat"></div>
 <input type="text" id="userInput" placeholder="Type something...">
@@ -23,33 +35,47 @@
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
   // --- FIREBASE CONFIG ---
   const firebaseConfig = {
-    apiKey: "AIzaSyCnWbzujk4iwZnDxceRDQRqw4VmJU1owC4",
-    authDomain: "zezo-36a82.firebaseapp.com",
-    databaseURL: "https://zezo-36a82-default-rtdb.firebaseio.com",
-    projectId: "zezo-36a82",
-    storageBucket: "zezo-36a82.firebasestorage.app",
-    messagingSenderId: "641346503114",
-    appId: "1:641346503114:web:faef4b2a051dcc059f4f33",
-    measurementId: "G-8BXRM7FYDM"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
   };
   firebase.initializeApp(firebaseConfig);
-  const db = firebase.database();
+  const db = firebase.firestore();
 
   const chatDiv = document.getElementById('chat');
   const input = document.getElementById('userInput');
   const sendBtn = document.getElementById('sendBtn');
 
+  // --- Preloaded basic knowledge ---
+  const defaultKnowledge = {
+    greeting: ["Hello! How are you?", "Hi there!", "Hey! Nice to see you!"],
+    farewell: ["Goodbye!", "See you later!", "Bye!"],
+    howareyou: ["I'm just code, but thanks for asking!", "Doing well, and you?"]
+  };
+
+  // Save defaults to Firestore if empty
+  async function initDefaults() {
+    for (const intent in defaultKnowledge) {
+      const doc = await db.collection('intents').doc(intent).get();
+      if (!doc.exists) {
+        await db.collection('intents').doc(intent).set({responses: defaultKnowledge[intent]});
+      }
+    }
+  }
+  initDefaults();
+
+  // --- Chat Functions ---
   sendBtn.onclick = async () => {
     const userText = input.value.trim();
     if (!userText) return;
     addMessage('user', userText);
     input.value = '';
-    await respond(userText);
+    await processMessage(userText);
   };
 
   function addMessage(sender, text) {
@@ -60,21 +86,88 @@
     chatDiv.scrollTop = chatDiv.scrollHeight;
   }
 
-  async function respond(userText) {
-    const key = userText.toLowerCase();
-    const snapshot = await db.ref('knowledge/' + key).get();
-    if (snapshot.exists()) {
-      addMessage('ai', snapshot.val());
-    } else {
-      const answer = prompt(`I don't know "${userText}". Teach me!`);
-      if (answer) {
-        await db.ref('knowledge/' + key).set(answer);
+  // --- Process Message & Intent Matching ---
+  async function processMessage(text) {
+    text = text.toLowerCase();
+
+    // Simple keyword matching for common intents
+    let intent = null;
+    if (text.includes("hello") || text.includes("hi") || text.includes("hey")) intent = "greeting";
+    else if (text.includes("bye") || text.includes("see you")) intent = "farewell";
+    else if (text.includes("how are you")) intent = "howareyou";
+
+    if (!intent) {
+      // Check Firestore for math rules
+      if (text.match(/\d+\s*[\+\-\*\/]\s*\d+/)) {
+        const answer = evaluateMath(text);
         addMessage('ai', answer);
-      } else {
-        addMessage('ai', "I won't remember that.");
+        return;
+      }
+
+      // Check Firestore for existing learned intents
+      const learned = await db.collection('intents').get();
+      let found = false;
+      learned.forEach(doc => {
+        const keywords = doc.data().keywords || [];
+        for (const kw of keywords) {
+          if (text.includes(kw)) {
+            intent = doc.id;
+            found = true;
+          }
+        }
+      });
+
+      if (!found) {
+        // Teach AI new intent
+        const meaning = prompt(`I don't understand: "${text}". What should I respond?`);
+        if (meaning) {
+          const newIntent = text.replace(/\s+/g,'_'); // use sanitized text as intent id
+          await db.collection('intents').doc(newIntent).set({
+            responses: [meaning],
+            keywords: [text]
+          });
+          addMessage('ai', meaning);
+        } else {
+          addMessage('ai', "I won't remember that.");
+        }
+        return;
       }
     }
+
+    // Respond with a random response for the intent
+    const doc = await db.collection('intents').doc(intent).get();
+    if (doc.exists) {
+      const responses = doc.data().responses;
+      const randomIndex = Math.floor(Math.random() * responses.length);
+      addMessage('ai', responses[randomIndex]);
+    } else {
+      addMessage('ai', "Hmm, I feel confused.");
+    }
   }
+
+  // --- Simple Math Evaluator ---
+  function evaluateMath(text) {
+    try {
+      // Sanitize: remove letters
+      const sanitized = text.replace(/[^0-9+\-*/(). ]/g, '');
+      const result = Function('"use strict"; return (' + sanitized + ')')();
+      return `The answer is ${result}`;
+    } catch {
+      return "I can't solve that yet.";
+    }
+  }
+
+  // --- Eye Animation ---
+  const pupilLeft = document.getElementById('pupilLeft');
+  const pupilRight = document.getElementById('pupilRight');
+
+  document.addEventListener('mousemove', e => {
+    const rect = document.getElementById('face').getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 10;
+    const y = ((e.clientY - rect.top) / rect.height - 0.5) * 10;
+    pupilLeft.style.transform = `translate(${x}px, ${y}px)`;
+    pupilRight.style.transform = `translate(${x}px, ${y}px)`;
+  });
 </script>
 </body>
 </html>
